@@ -1,0 +1,176 @@
+#!/usr/bin/python3.6
+
+from __future__ import print_function
+import collections
+import sys
+#import re
+import argparse
+import HTSeq
+#import math
+
+
+
+def parserFunction():
+    # parse the command line arguments:
+    parser = argparse.ArgumentParser(description='This script counts reads '
+                                     'in a BAM file that map within '
+                                     'specified regions (as a BED file). '
+                                     'Note that BAM file have to be sorted '
+                                     'by read ID.')
+    parser.add_argument('-t','--transcript',
+                        help='Report counts for each transcript. '
+                        'Otherwise report gene counts.',
+                        action="store_true")
+    parser.add_argument('-g','--globalCounts',
+                        help='report counts also for trenscripts '
+                        'that are not listed in the BED annotation file. '
+                        'Useful if interested in genes that are not annotated '
+                        '(i.e. lncRNA).',
+                        action="store_true")
+    parser.add_argument('-a','--annotation',
+                        help='BED file containing regions where to count reads.'
+                        ' Examples are CDS boundaries, exons, etc.',
+                        nargs=1,
+                        type=str)
+    parser.add_argument('-d','--debug',
+                        help='Produce a verbose output, useful for debugging '
+                        'purposes.',
+                        action="store_true")
+    parser.add_argument('-b','--bam',
+                        help='BAM file sorted by read ID',
+                        nargs=1,
+                        type=str,
+                        required=True)
+    return parser.parse_args()
+
+def readAnnotation(annoFile):
+    trans = set()
+    genes = set()
+    trnsGene = collections.Counter( )
+    features =  HTSeq.GenomicArrayOfSets( "auto", stranded=False )
+    for line in open( annoFile ):
+        fields = line.split( "\t" )
+        chrIds = fields[0].split( "|" )
+        geneId = chrIds[0]
+        trnsId = chrIds[1]
+        #print(geneId, trnsId)
+        iv = HTSeq.GenomicInterval( trnsId, int(fields[1]), int(fields[2]) )
+        features[ iv ] += trnsId
+        trans.add(trnsId)
+        genes.add(geneId)
+        trnsGene[ trnsId ] = geneId
+    return features, trans, trnsGene, genes
+
+
+if __name__ == '__main__':
+
+    args = parserFunction()
+
+    transcript = args.transcript
+    cglobal = args.globalCounts
+    dbg = args.debug
+
+    bamFile = str(args.bam[0])
+    if dbg:
+        print("BAM file:", bamFile)
+    
+    if args.annotation:
+        annoFile = str(args.annotation[0])
+        if dbg: print("BED file:", annoFile)
+        features, tList, trnsGene, gList = readAnnotation(annoFile)
+
+    
+    cTrns = collections.Counter( )
+    cGene = collections.Counter( )
+    cRead = collections.Counter( )
+    count = collections.Counter( )
+    oldReadId = ''
+    allGeneId = set()
+    lines = 1
+
+    
+    almnt_file = HTSeq.BAM_Reader( bamFile )
+    for almnt in almnt_file:
+        # check if read is aligned
+        if not almnt.aligned:
+            count[ "_unmapped" ] += 1
+            continue
+
+        count[ "_hit" ] += 1
+        
+        readId = almnt.read.name
+        chrIds = almnt.iv.chrom.split( "|" )
+        geneId = chrIds[0]
+        trnsId = chrIds[1]
+
+        # when read alignemnt change store info about previous read
+        # (where it mapped):
+        if oldReadId != '' and oldReadId != readId:
+            count[ "_mapped" ] += 1
+            if len(allGeneId) > 1:
+                count[ "_ambiguous" ] += 1
+                if dbg: print(oldReadId, 'maps', len(allGeneId), 'genes')
+            else:
+                count[ "_unambiguous" ] += 1
+                for gid in allGeneId:
+                    break
+                # add read to gene only if correctly mapped to at
+                # least 1 transcript:
+                if len(list(cRead.elements())) > 0:
+                    cGene[ gid ] += 1
+                    count[ "_feature" ] += 1
+                else:
+                    count[ "_no_feature" ] += 1
+                # add read to all transcripts:
+                for tid in cRead:
+                    if dbg: print(tid, geneId, 'has one read')
+                    cTrns[ tid ] += 1
+            allGeneId = set()
+            cRead = collections.Counter( )
+
+        
+        almnt.iv.chrom = trnsId
+
+        if cglobal:
+            if trnsId not in tList:
+                iv = HTSeq.GenomicInterval( trnsId, 0, 999999999999 )
+                features[ iv ] += trnsId
+                tList.add(trnsId)
+                gList.add(geneId)
+                trnsGene[ trnsId ] = geneId
+                        
+        trns_ids = set()
+        for iv, val in features[ almnt.iv ].steps():
+            #print(iv, '->', val, '->', trns_ids)
+            trns_ids |= val
+            #print(trns_ids, len(trns_ids))
+        if len(trns_ids) == 1:
+            trns_id = list(trns_ids)[0]
+            cRead[ trns_id ] += 1
+            count[ "_hit_feature" ] += 1
+            #print(trns_id, cTrns[ trns_id ])
+        elif len(trns_ids) == 0:
+            count[ "_hit_no_feature" ] += 1
+        else:
+            count[ "_hit_ambiguous" ] += 1
+        oldReadId = readId
+        allGeneId.add(geneId)
+
+    # Print out everything:
+    if transcript:
+        for trns_id in tList:
+            print(trns_id, cTrns[ trns_id ])
+    else:
+         for gid in gList:
+            print(gid, cGene[ gid ])
+
+
+    # Print summary:
+    print("Mapped reads:     ", count[ "_mapped" ], file=sys.stderr)
+    print("Unmapped reads:   ", count[ "_unmapped" ], file=sys.stderr)
+    print("Transcript hits:  ", count[ "_hit" ], file=sys.stderr)
+    print("Ambiguous reads:  ", count[ "_ambiguous" ],file=sys.stderr)
+    print("Unambiguous reads:", count[ "_unambiguous" ], file=sys.stderr)
+    print("No feature reads: ", count[ "_no_feature" ], file=sys.stderr)
+    print("Feature reads:    ", count[ "_feature" ], file=sys.stderr)
+    

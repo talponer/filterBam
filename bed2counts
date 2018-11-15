@@ -1,0 +1,174 @@
+#!/usr/bin/python3.6
+
+from __future__ import print_function
+import sys
+import argparse
+
+def parserFunction():
+    # parse the command line arguments:
+    parser = argparse.ArgumentParser(description='This script counts reads '
+                                     'in a BED file (from STDIN) that map '
+                                     'within specified regions '
+                                     '(provided in BED format '
+                                     'Note that BED file have to be '
+                                     'sorted by read ID.')
+    parser.add_argument('-t','--transcript',
+                        help='Report counts for each transcript. '
+                        'Otherwise report gene counts.',
+                        action="store_true")
+    parser.add_argument('-g','--globalCounts',
+                        help='report counts also for trenscripts '
+                        'that are not listed in the BED annotation file. '
+                        'Useful if interested in genes that are not annotated '
+                        '(i.e. lncRNA).',
+                        action="store_true")
+    parser.add_argument('-a','--annotation',
+                        help='BED file containing regions where to count reads.'
+                        ' Examples are CDS boundaries, exons, etc.',
+                        nargs=1,
+                        type=str)
+    parser.add_argument('-d','--debug',
+                        help='Produce a verbose output, useful for debugging '
+                        'purposes.',
+                        action="store_true")
+    return parser.parse_args()
+
+def readAnnotation(annoFile):
+    trans = set()
+    genes = set()
+    cdsStart = dict()
+    cdsEnd = dict()
+    trnsGene = dict()
+    for line in open( annoFile ):
+        fields = line.split( "\t" )
+        chrIds = fields[0].split( "|" )
+        geneId = chrIds[0]
+        trnsId = chrIds[1]
+        cdsStart[ trnsId ] = int(fields[1])
+        cdsEnd[ trnsId ] = int(fields[2])
+        trans.add(trnsId)
+        genes.add(geneId)
+        trnsGene[ trnsId ] = geneId
+    return cdsStart, cdsEnd, trans, trnsGene, genes
+
+
+if __name__ == '__main__':
+
+    args = parserFunction()
+
+    transcript = args.transcript
+    cglobal = args.globalCounts
+    dbg = args.debug
+
+    if args.annotation:
+        annoFile = str(args.annotation[0])
+        if dbg: print("BED file:", annoFile)
+        cdsStart, cdsEnd, tList, trnsGene, gList = readAnnotation(annoFile)
+
+    
+    cTrns = dict()
+    cGene = dict()
+    cRead = dict()
+    count = dict()
+    oldReadId = ''
+    allGeneId = set()
+    lines = 1
+
+    count[ "_hit" ] = 0
+    count[ "_unmapped" ] = 0
+    count[ "_mapped" ] = 0
+    count[ "_ambiguous" ] = 0
+    count[ "_unambiguous" ] = 0
+    count[ "_feature" ] = 0
+    count[ "_no_feature" ] = 0
+    count[ "_hit_feature" ] = 0
+    count[ "_hit_no_feature" ] = 0
+    
+    for almnt in sys.stdin:
+        # check if read is aligned
+        almntFields = almnt.split( "\t" )
+        readId = almntFields[3]
+        chrIds = almntFields[0].split( "|" )
+        geneId = chrIds[0]
+        trnsId = chrIds[1]
+        readStart = int(almntFields[1])
+        readStop = int(almntFields[2])
+        readStrand = almntFields[5]
+
+        if(readStrand == "-"): continue
+
+        count[ "_hit" ] += 1
+        
+        # when read alignemnt change store info about previous read
+        # (where it mapped):
+        if oldReadId != '' and oldReadId != readId:
+            count[ "_mapped" ] += 1
+            # if read maps to multiple genes
+            if len(allGeneId) > 1:
+                count[ "_ambiguous" ] += 1
+                if dbg: print(oldReadId, 'maps', len(allGeneId), 'genes')
+            else:
+                count[ "_unambiguous" ] += 1
+                for gid in allGeneId:
+                    break
+                # add read to gene only if correctly mapped to at
+                # least 1 transcript:
+                if len(cRead) > 0:
+                    if gid in cGene:
+                        cGene[ gid ] += 1
+                    else:
+                        cGene[ gid ] = 1
+                    count[ "_feature" ] += 1
+                else:
+                    count[ "_no_feature" ] += 1
+                # add read to all transcripts:
+                for tid in cRead:
+                    if dbg: print(tid, geneId, 'has one read')
+                    if tid in cTrns:
+                        cTrns[ tid ] += 1
+                    else:
+                        cTrns[ tid ] = 1
+            allGeneId = set()
+            cRead = dict()
+
+        if cglobal:
+            if trnsId not in tList:
+                cdsStart[ trnsId ] = 0
+                cdsEnd[ trnsId ] = 999999999999
+                tList.add(trnsId)
+                gList.add(geneId)
+                trnsGene[ trnsId ] = geneId
+                
+                        
+        trns_ids = set()
+
+        if cdsStart[ trnsId ] <= readStop and cdsEnd[ trnsId ] >= readStart:
+            if trnsId in cRead:
+                cRead[ trnsId ] += 1
+            else:
+                cRead[ trnsId ] = 1
+            count[ "_hit_feature" ] += 1
+        else:
+            count[ "_hit_no_feature" ] += 1
+            
+        oldReadId = readId
+        allGeneId.add(geneId)
+
+    # Print out everything:
+    if transcript:
+        for trns_id in cTrns.keys():
+            print(trns_id, cTrns[ trns_id ])
+    else:
+         for gid in cGene.keys():
+            print(gid, cGene[ gid ])
+
+
+    # Print summary:
+    print("Mapped reads:     ", count[ "_mapped" ], file=sys.stderr)
+    print("Unmapped reads:   ", count[ "_unmapped" ], file=sys.stderr)
+    print("Transcript hits:  ", count[ "_hit" ], file=sys.stderr)
+    print("Ambiguous reads:  ", count[ "_ambiguous" ],file=sys.stderr)
+    print("Unambiguous reads:", count[ "_unambiguous" ], file=sys.stderr)
+    print("No feature reads: ", count[ "_no_feature" ], file=sys.stderr)
+    print("Feature reads:    ", count[ "_feature" ], file=sys.stderr)
+    

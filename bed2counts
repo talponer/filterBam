@@ -143,6 +143,9 @@ if __name__ == '__main__':
         trns_ids = set()
 
         if trnsId in tList:
+            # add geneID to the list only if read map to listed genes
+            # (the mapping database might have genes on scaffold that
+            # I do not want to count by default)
             allGeneId.add(geneId)
             if cdsStart[ trnsId ] <= readStop and cdsEnd[ trnsId ] >= readStart:
                 if trnsId in cRead:

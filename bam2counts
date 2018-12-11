@@ -145,6 +145,8 @@ if __name__ == '__main__':
             trns_ids |= val
             #print(trns_ids, len(trns_ids))
         if len(trns_ids) == 1:
+            # add gene to list only if present in the anno file
+            allGeneId.add(geneId)
             trns_id = list(trns_ids)[0]
             cRead[ trns_id ] += 1
             count[ "_hit_feature" ] += 1
@@ -154,7 +156,6 @@ if __name__ == '__main__':
         else:
             count[ "_hit_ambiguous" ] += 1
         oldReadId = readId
-        allGeneId.add(geneId)
 
     # Print out everything:
     if transcript:

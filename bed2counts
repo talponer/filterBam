@@ -143,6 +143,7 @@ if __name__ == '__main__':
         trns_ids = set()
 
         if trnsId in tList:
+            allGeneId.add(geneId)
             if cdsStart[ trnsId ] <= readStop and cdsEnd[ trnsId ] >= readStart:
                 if trnsId in cRead:
                     cRead[ trnsId ] += 1
@@ -151,9 +152,8 @@ if __name__ == '__main__':
                 count[ "_hit_feature" ] += 1
             else:
                 count[ "_hit_no_feature" ] += 1
-            
+
         oldReadId = readId
-        allGeneId.add(geneId)
 
     # Print out everything:
     if transcript:

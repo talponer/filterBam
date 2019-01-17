@@ -190,8 +190,9 @@ if __name__ == '__main__':
                 if dbg: print('Printing only:', oTypes)
                 if dbg: print(gid, 'type:', typeGene[ gid ])
                 #if typeGene[ gid ] in oTypes:
-                if any(typeGene[ gid ] in s for s in oTypes):
-                    print(gid, cGene[ gid ])
+                if gid in typeGene:
+                    if any(typeGene[ gid ] in s for s in oTypes):
+                        print(gid, cGene[ gid ])
             else:
                 print(gid, cGene[ gid ])
 

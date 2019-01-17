@@ -33,7 +33,9 @@ def parserFunction():
                         type=str)
     parser.add_argument('-o','--outputtype',
                         help='If the type field is present in the annotation '
-                        'file, restrict the output to the following types.',
+                        'file, restrict the output to the following types.'
+                        'Multiples types can be specified if separated by a '
+                        'column [|].',
                         nargs=1,
                         type=str)
     parser.add_argument('-d','--debug',
@@ -187,7 +189,8 @@ if __name__ == '__main__':
             if pTypeOnly == 1:
                 if dbg: print('Printing only:', oTypes)
                 if dbg: print(gid, 'type:', typeGene[ gid ])
-                if typeGene[ gid ] in oTypes:
+                #if typeGene[ gid ] in oTypes:
+                if any(typeGene[ gid ] in s for s in oTypes):
                     print(gid, cGene[ gid ])
             else:
                 print(gid, cGene[ gid ])

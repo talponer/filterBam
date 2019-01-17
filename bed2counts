@@ -1,4 +1,4 @@
-#!/usr/bin/python3.6
+#!/usr/bin/python3
 
 from __future__ import print_function
 import sys
@@ -19,12 +19,21 @@ def parserFunction():
     parser.add_argument('-g','--globalCounts',
                         help='report counts also for trenscripts '
                         'that are not listed in the BED annotation file. '
-                        'Useful if interested in genes that are not annotated '
-                        '(i.e. lncRNA).',
+                        'Be careful when using this option as it might output '
+                        'genes that are located in scaffolds.',
                         action="store_true")
     parser.add_argument('-a','--annotation',
                         help='BED file containing regions where to count reads.'
-                        ' Examples are CDS boundaries, exons, etc.',
+                        ' Examples are CDS boundaries, exons, etc. The file has '
+                        '3 obligatory fields: ID (in the form GeneID|TranscriptID), '
+                        'Start position and Stop position. An additional filed '
+                        'might be present in the form of gene types (e.g. '
+                        'protein_coding, lncRNA, pseudogene, etc.)',
+                        nargs=1,
+                        type=str)
+    parser.add_argument('-o','--outputtype',
+                        help='If the type field is present in the annotation '
+                        'file, restrict the output to the following types.',
                         nargs=1,
                         type=str)
     parser.add_argument('-d','--debug',
@@ -39,7 +48,9 @@ def readAnnotation(annoFile):
     cdsStart = dict()
     cdsEnd = dict()
     trnsGene = dict()
+    typeGene = dict()
     for line in open( annoFile ):
+        line.rstrip("\n\r")
         fields = line.split( "\t" )
         chrIds = fields[0].split( "|" )
         geneId = chrIds[0]
@@ -49,7 +60,9 @@ def readAnnotation(annoFile):
         trans.add(trnsId)
         genes.add(geneId)
         trnsGene[ trnsId ] = geneId
-    return cdsStart, cdsEnd, trans, trnsGene, genes
+        if len( fields ) == 4:
+            typeGene[ geneId ] = fields[3].rstrip("\n\r")
+    return cdsStart, cdsEnd, trans, trnsGene, genes, typeGene
 
 
 if __name__ == '__main__':
@@ -63,8 +76,15 @@ if __name__ == '__main__':
     if args.annotation:
         annoFile = str(args.annotation[0])
         if dbg: print("BED file:", annoFile)
-        cdsStart, cdsEnd, tList, trnsGene, gList = readAnnotation(annoFile)
+        cdsStart, cdsEnd, tList, trnsGene, gList, typeGene = readAnnotation(annoFile)
 
+    pTypeOnly = 0
+    if args.outputtype:
+        oType = str(args.outputtype[0])
+        oType.rstrip("\n\r")
+        oTypes = oType.split( "|" )
+        pTypeOnly = 1
+        if dbg: print("Output:", oTypes, " Print:", pTypeOnly)
     
     cTrns = dict()
     cGene = dict()
@@ -163,9 +183,14 @@ if __name__ == '__main__':
         for trns_id in cTrns.keys():
             print(trns_id, cTrns[ trns_id ])
     else:
-         for gid in cGene.keys():
-            print(gid, cGene[ gid ])
-
+        for gid in cGene.keys():
+            if pTypeOnly == 1:
+                if dbg: print('Printing only:', oTypes)
+                if dbg: print(gid, 'type:', typeGene[ gid ])
+                if typeGene[ gid ] in oTypes:
+                    print(gid, cGene[ gid ])
+            else:
+                print(gid, cGene[ gid ])
 
     # Print summary:
     print("Mapped reads:     ", count[ "_mapped" ], file=sys.stderr)

@@ -3,6 +3,8 @@
 from __future__ import print_function
 import sys
 import argparse
+import re
+
 
 def parserFunction():
     # parse the command line arguments:
@@ -191,8 +193,12 @@ if __name__ == '__main__':
                 if dbg: print(gid, 'type:', typeGene[ gid ])
                 #if typeGene[ gid ] in oTypes:
                 if gid in typeGene:
-                    if any(typeGene[ gid ] in s for s in oTypes):
+                    if typeGene[ gid ] in oTypes:
                         print(gid, cGene[ gid ])
+                    #if any(typeGene[ gid ] in s for s in oTypes):
+                    #for typeSel in oTypes:
+                        #if re.match(typeSel, typeGene[ gid ]):
+                            #print(gid, cGene[ gid ])
             else:
                 print(gid, cGene[ gid ])
 

@@ -5,13 +5,12 @@ import sys
 import argparse
 import re
 
-
 def parserFunction():
     # parse the command line arguments:
     parser = argparse.ArgumentParser(description='This script counts reads '
                                      'in a BED file (from STDIN) that map '
                                      'within specified regions '
-                                     '(provided in BED format '
+                                     '(provided in BED format). '
                                      'Note that BED file have to be '
                                      'sorted by read ID.')
     parser.add_argument('-t','--transcript',
@@ -29,8 +28,8 @@ def parserFunction():
                         ' Examples are CDS boundaries, exons, etc. The file has '
                         '3 obligatory fields: ID (in the form GeneID|TranscriptID), '
                         'Start position and Stop position. An additional filed '
-                        'might be present in the form of gene types (e.g. '
-                        'protein_coding, lncRNA, pseudogene, etc.)',
+                        'might be present in the form of gene_types|transcript_type'
+                        ' (e.g. protein_coding, lncRNA, pseudogene, etc.)',
                         nargs=1,
                         type=str)
     parser.add_argument('-o','--outputtype',
@@ -53,6 +52,7 @@ def readAnnotation(annoFile):
     cdsEnd = dict()
     trnsGene = dict()
     typeGene = dict()
+    typeTrns = dict()
     for line in open( annoFile ):
         line.rstrip("\n\r")
         fields = line.split( "\t" )
@@ -65,8 +65,10 @@ def readAnnotation(annoFile):
         genes.add(geneId)
         trnsGene[ trnsId ] = geneId
         if len( fields ) == 4:
-            typeGene[ geneId ] = fields[3].rstrip("\n\r")
-    return cdsStart, cdsEnd, trans, trnsGene, genes, typeGene
+            types = fields[3].split( "|" )
+            typeGene[ geneId ] = types[0].rstrip("\n\r")
+            if len( types ) == 2: typeTrns[ trnsId ] = types[1].rstrip("\n\r")
+    return cdsStart, cdsEnd, trans, trnsGene, genes, typeGene, typeTrns
 
 
 if __name__ == '__main__':
@@ -80,7 +82,7 @@ if __name__ == '__main__':
     if args.annotation:
         annoFile = str(args.annotation[0])
         if dbg: print("BED file:", annoFile)
-        cdsStart, cdsEnd, tList, trnsGene, gList, typeGene = readAnnotation(annoFile)
+        cdsStart, cdsEnd, tList, trnsGene, gList, typeGene, typeTrns = readAnnotation(annoFile)
 
     pTypeOnly = 0
     if args.outputtype:
@@ -185,20 +187,26 @@ if __name__ == '__main__':
     # Print out everything:
     if transcript:
         for trns_id in cTrns.keys():
-            print(trns_id, cTrns[ trns_id ])
+            if pTypeOnly == 1:
+                if dbg: print('Printing only:', oTypes)
+                tTrns = typeTrns.keys()
+                if gid in tTrns:
+                    # chek the type of each transcript:
+                    if dbg: print(trns_id, 'type:', trnsGene[ trns_id ])
+                    if typeTrns[ trns_id ] in oTypes:
+                        print(trns_id, cTrns[ trns_id ])
+            else:
+                print(trns_id, cTrns[ trns_id ])
     else:
         for gid in cGene.keys():
             if pTypeOnly == 1:
                 if dbg: print('Printing only:', oTypes)
-                if dbg: print(gid, 'type:', typeGene[ gid ])
-                #if typeGene[ gid ] in oTypes:
-                if gid in typeGene:
+                tGenes = typeGene.keys()
+                if gid in tGenes:
+                    # chek the type of each gene:
+                    if dbg: print(gid, 'type:', typeGene[ gid ])
                     if typeGene[ gid ] in oTypes:
                         print(gid, cGene[ gid ])
-                    #if any(typeGene[ gid ] in s for s in oTypes):
-                    #for typeSel in oTypes:
-                        #if re.match(typeSel, typeGene[ gid ]):
-                            #print(gid, cGene[ gid ])
             else:
                 print(gid, cGene[ gid ])
 

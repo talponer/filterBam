@@ -68,6 +68,7 @@ def readAnnotation(annoFile):
             types = fields[3].split( "|" )
             typeGene[ geneId ] = types[0].rstrip("\n\r")
             if len( types ) == 2: typeTrns[ trnsId ] = types[1].rstrip("\n\r")
+        #if dbg: print("Gene:", geneId, " Transcript:", trnsId, " Transcript type:", typeTrns[ trnsId ])
     return cdsStart, cdsEnd, trans, trnsGene, genes, typeGene, typeTrns
 
 
@@ -115,8 +116,18 @@ if __name__ == '__main__':
         almntFields = almnt.split( "\t" )
         readId = almntFields[3]
         chrIds = almntFields[0].split( "|" )
-        geneId = chrIds[0]
-        trnsId = chrIds[1]
+        if (len(chrIds) > 1):
+            geneId = chrIds[0]
+            trnsId = chrIds[1]
+            if dbg: print("Gene:", geneId, " Transcript:", trnsId)
+        else:
+            chrIds = almntFields[0].split( "." )
+            trnsId = chrIds[0]
+            if dbg: print("Transcript only:", trnsId)
+            if trnsId in trnsGene:
+                geneId = trnsGene[ trnsId ]
+            else:
+                continue
         readStart = int(almntFields[1])
         readStop = int(almntFields[2])
         readStrand = almntFields[5]

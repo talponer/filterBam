@@ -7,22 +7,12 @@ import re
 
 def parserFunction():
     # parse the command line arguments:
-    parser = argparse.ArgumentParser(description='This script counts reads '
+    parser = argparse.ArgumentParser(description='This script convert reads '
                                      'in a BED file (from STDIN) that map '
                                      'within specified regions '
-                                     '(provided in BED format). '
+                                     '(provided in BED format) into SGA file. '
                                      'Note that BED file have to be '
                                      'sorted by read ID.')
-    parser.add_argument('-t','--transcript',
-                        help='Report counts for each transcript. '
-                        'Otherwise report gene counts.',
-                        action="store_true")
-    parser.add_argument('-g','--globalCounts',
-                        help='report counts also for trenscripts '
-                        'that are not listed in the BED annotation file. '
-                        'Be careful when using this option as it might output '
-                        'genes that are located in scaffolds.',
-                        action="store_true")
     parser.add_argument('-a','--annotation',
                         help='BED file containing regions where to count reads.'
                         ' Examples are CDS boundaries, exons, etc. The file has '
@@ -39,12 +29,10 @@ def parserFunction():
                         'column [|].',
                         nargs=1,
                         type=str)
-    parser.add_argument('-s','--shift',
-                        help='Shift reads 5-end downstream to align them '
-                        'to putative ribosome A site. Default = 15.',
+    parser.add_argument('-f','--feature',
+                        help='SGA file feature',
                         nargs=1,
-                        type=int,
-                        default=15)
+                        type=str)
     parser.add_argument('-d','--debug',
                         help='Produce a verbose output, useful for debugging '
                         'purposes.',
@@ -82,11 +70,15 @@ if __name__ == '__main__':
 
     args = parserFunction()
 
-    transcript = args.transcript
-    cglobal = args.globalCounts
+#    transcript = args.transcript
+#    cglobal = args.globalCounts
     dbg = args.debug
-    shift = args.shift
-    
+
+    if args.feature:
+        feature = str(args.feature[0])
+    else:
+        feature = 'test'
+
     if args.annotation:
         annoFile = str(args.annotation[0])
         if dbg: print("BED file:", annoFile)
@@ -107,7 +99,8 @@ if __name__ == '__main__':
     oldReadId = ''
     allGeneId = set()
     lines = 1
-
+    output = ""
+    
     count[ "_hit" ] = 0
     count[ "_unmapped" ] = 0
     count[ "_mapped" ] = 0
@@ -123,6 +116,9 @@ if __name__ == '__main__':
         almntFields = almnt.split( "\t" )
         readId = almntFields[3]
         chrIds = almntFields[0].split( "|" )
+        algnStart = almntFields[1]
+        algnStop = almntFields[2]
+        
         if (len(chrIds) > 1):
             geneId = chrIds[0]
             trnsId = chrIds[1]
@@ -145,96 +141,103 @@ if __name__ == '__main__':
         
         # when read alignemnt change store info about previous read
         # (where it mapped):
-        if oldReadId != '' and oldReadId != readId:
-            count[ "_mapped" ] += 1
-            # if read maps to multiple genes
-            if len(allGeneId) > 1:
-                count[ "_ambiguous" ] += 1
-                if dbg: print(oldReadId, 'maps', len(allGeneId), 'genes')
-            else:
-                count[ "_unambiguous" ] += 1
-                for gid in allGeneId:
-                    break
-                # add read to gene only if correctly mapped to at
-                # least 1 transcript:
-                if len(cRead) > 0:
-                    if gid in cGene:
-                        cGene[ gid ] += 1
-                    else:
-                        cGene[ gid ] = 1
-                    count[ "_feature" ] += 1
-                else:
-                    count[ "_no_feature" ] += 1
-                # add read to all transcripts:
-                for tid in cRead:
-                    if dbg: print(tid, geneId, 'has one read')
-                    if tid in cTrns:
-                        cTrns[ tid ] += 1
-                        if dbg: print(tid, geneId, cTrns[ tid ])
-                    else:
-                        cTrns[ tid ] = 1
-            allGeneId = set()
-            cRead = dict()
+        # if oldReadId != '' and oldReadId != readId:
+        #     count[ "_mapped" ] += 1
+        #     # if read maps to multiple genes
+        #     if len(allGeneId) > 1:
+        #         count[ "_ambiguous" ] += 1
+        #         if dbg: print(oldReadId, 'maps', len(allGeneId), 'genes')
+        #     else:
+        #         count[ "_unambiguous" ] += 1
+        #         for gid in allGeneId:
+        #             break
+        #         # add read to gene only if correctly mapped to at
+        #         # least 1 transcript:
+        #         if len(cRead) > 0:
+        #             if gid in cGene:
+        #                 cGene[ gid ] += 1
+        #             else:
+        #                 cGene[ gid ] = 1
+        #             print(output, end="")
+        #             count[ "_feature" ] += 1
+        #         else:
+        #             count[ "_no_feature" ] += 1
+        #         # add read to all transcripts:
+        #         for tid in cRead:
+        #             if dbg: print(tid, geneId, 'has one read')
+        #             if tid in cTrns:
+        #                 cTrns[ tid ] += 1
+        #             else:
+        #                 cTrns[ tid ] = 1
+        #     allGeneId = set()
+        #     cRead = dict()
+        #     output = ""
 
-        if cglobal:
-            if trnsId not in tList:
-                cdsStart[ trnsId ] = 0
-                cdsEnd[ trnsId ] = 999999999999
-                tList.add(trnsId)
-                gList.add(geneId)
-                trnsGene[ trnsId ] = geneId
+
+        # if cglobal:
+        #     if trnsId not in tList:
+        #         cdsStart[ trnsId ] = 0
+        #         cdsEnd[ trnsId ] = 999999999999
+        #         tList.add(trnsId)
+        #         gList.add(geneId)
+        #         trnsGene[ trnsId ] = geneId
                 
                         
         trns_ids = set()
 
-        if trnsId in tList:
-            # add geneID to the list only if read map to listed genes
-            # (the mapping database might have genes on scaffold that
-            # I do not want to count by default)
-            allGeneId.add(geneId)
-            if cdsStart[ trnsId ] <= readStart+shift and  cdsEnd[ trnsId ] >= readStart+shift:
-                if trnsId in cRead:
-                    cRead[ trnsId ] += 1
-                else:
-                    cRead[ trnsId ] = 1
-                count[ "_hit_feature" ] += 1
-            else:
-                count[ "_hit_no_feature" ] += 1
+        # if trnsId in tList:
+        #     # add geneID to the list only if read map to listed genes
+        #     # (the mapping database might have genes on scaffold that
+        #     # I do not want to count by default)
+        #     allGeneId.add(geneId)
+        #     if cdsStart[ trnsId ] <= readStop and cdsEnd[ trnsId ] >= readStart:
+        #         if trnsId in cRead:
+        #             cRead[ trnsId ] += 1
+        #         else:
+        #             cRead[ trnsId ] = 1
+        #         count[ "_hit_feature" ] += 1
+        #     else:
+        #         count[ "_hit_no_feature" ] += 1
 
-        oldReadId = readId
+        if trnsId in cdsStart and cdsStart[ trnsId ] <= readStop and cdsEnd[ trnsId ] >= readStart:
+            count[ "_feature" ] += 1
+            output = output + trnsId + "\t" + feature + "\t" + algnStart + "\t+\t1\t" + geneId + "\n"  
 
+        #oldReadId = readId
+        
+        
     # Print out everything:
-    if transcript:
-        for trns_id in cTrns.keys():
-            if pTypeOnly == 1:
-                if dbg: print('Printing only:', oTypes)
-                tTrns = typeTrns.keys()
-                if tid in tTrns:
-                    # chek the type of each transcript:
-                    if dbg: print(trns_id, 'type:', trnsGene[ trns_id ])
-                    if typeTrns[ trns_id ] in oTypes:
-                        print(trns_id, cTrns[ trns_id ])
-            else:
-                print(trns_id, cTrns[ trns_id ])
-    else:
-        for gid in cGene.keys():
-            if pTypeOnly == 1:
-                if dbg: print('Printing only:', oTypes)
-                tGenes = typeGene.keys()
-                if gid in tGenes:
-                    # chek the type of each gene:
-                    if dbg: print(gid, 'type:', typeGene[ gid ])
-                    if typeGene[ gid ] in oTypes:
-                        print(gid, cGene[ gid ])
-            else:
-                print(gid, cGene[ gid ])
+    # if transcript:
+    #     for trns_id in cTrns.keys():
+    #         if pTypeOnly == 1:
+    #             if dbg: print('Printing only:', oTypes)
+    #             tTrns = typeTrns.keys()
+    #             if gid in tTrns:
+    #                 # chek the type of each transcript:
+    #                 if dbg: print(trns_id, 'type:', trnsGene[ trns_id ])
+    #                 if typeTrns[ trns_id ] in oTypes:
+    #                     print(trns_id, cTrns[ trns_id ])
+    #         else:
+    #             print(trns_id, cTrns[ trns_id ])
+    # else:
+    #     for gid in cGene.keys():
+    #         if pTypeOnly == 1:
+    #             if dbg: print('Printing only:', oTypes)
+    #             tGenes = typeGene.keys()
+    #             if gid in tGenes:
+    #                 # chek the type of each gene:
+    #                 if dbg: print(gid, 'type:', typeGene[ gid ])
+    #                 if typeGene[ gid ] in oTypes:
+    #                     print(gid, cGene[ gid ])
+    #         else:
+    #             print(gid, cGene[ gid ])
 
     # Print summary:
     print("Mapped reads:     ", count[ "_mapped" ], file=sys.stderr)
-    print("Unmapped reads:   ", count[ "_unmapped" ], file=sys.stderr)
+    #print("Unmapped reads:   ", count[ "_unmapped" ], file=sys.stderr)
     print("Transcript hits:  ", count[ "_hit" ], file=sys.stderr)
-    print("Ambiguous reads:  ", count[ "_ambiguous" ],file=sys.stderr)
-    print("Unambiguous reads:", count[ "_unambiguous" ], file=sys.stderr)
-    print("No feature reads: ", count[ "_no_feature" ], file=sys.stderr)
+    #print("Ambiguous reads:  ", count[ "_ambiguous" ],file=sys.stderr)
+    #print("Unambiguous reads:", count[ "_unambiguous" ], file=sys.stderr)
+    #print("No feature reads: ", count[ "_no_feature" ], file=sys.stderr)
     print("Feature reads:    ", count[ "_feature" ], file=sys.stderr)
     
